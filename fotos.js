@@ -303,12 +303,11 @@ const ALBUM = {
     },
   ],
 
-  // Agrega una hoja rayada al final para que cada uno escriba algo (si lo imprimen)
+  // Agrega una hoja rayada al final donde cada uno puede dejar una nota (botón "+ dejar una nota")
   paginaDeFirmas: true,
 
   despedida:
-    "Gracias por cada reunión, cada reto y cada 'ya casi lo tengo'. " +
-    "Nos vemos en el próximo semestre.",
+    "Gracias por cada reunión, cada reto y cada 'ya casi lo tengo'.",
 
   // Nota a mano en la página de despedida (bórrala si no quieres ninguna)
   nota: {

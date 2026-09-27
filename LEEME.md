@@ -8,6 +8,8 @@
      Todo se guarda solo en el navegador mientras escribes; al terminar dale a **💾 guardar** y elige el archivo
      `descripciones.js` de esta carpeta para reemplazarlo (en Chrome/Edge se queda guardando ahí mismo;
      en otros navegadores se descarga y tienes que moverlo a esta carpeta).
+   - **Notas en la página de firmas:** en la página "Firmas & notas" dale a **+ dejar una nota**, escribe el texto y el nombre.
+     La × borra una nota. Se guardan con el mismo botón **💾 guardar** (van en `descripciones.js`, en `NOTAS`).
 3. Pon la canción en `musica/cancion.mp3`
 4. Abre `index.html` en el navegador (doble clic)
 

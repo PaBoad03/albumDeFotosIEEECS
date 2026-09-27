@@ -20,6 +20,15 @@
   let borrador = {};
   try { borrador = JSON.parse(localStorage.getItem(CLAVE_BORRADOR)) || {}; } catch (_) {}
   const CAMPOS = ["titulo", "descripcion", "fecha"];
+
+  // Notas de la página de firmas: borrador (localStorage) > NOTAS de descripciones.js
+  let notasGuardadas = typeof NOTAS !== "undefined" && Array.isArray(NOTAS) ? NOTAS : [];
+  const CLAVE_NOTAS = "album-memorias-notas";
+  let borradorNotas = null; // null = sin cambios
+  try { borradorNotas = JSON.parse(localStorage.getItem(CLAVE_NOTAS)); } catch (_) {}
+  if (!Array.isArray(borradorNotas)) borradorNotas = null;
+  const notasActuales = () => borradorNotas || notasGuardadas;
+  const notaVacia = (n) => !(n.texto || "").trim() && !(n.firma || "").trim();
   function conTextos(p) {
     const ed = { ...GUARDADAS[p.foto], ...borrador[p.foto] };
     const r = { ...p };
@@ -139,7 +148,18 @@
     <div class="adorno"></div>
     <p>${esc(p.texto)}</p>`;
 
-  const paginaFirmas = () => `<h2>Firmas &amp; notas</h2><p>déjale algo escrito al semillero...</p>`;
+  const htmlNotas = (notas) => notas.map((n, i) => `
+    <div class="nota-firma" data-i="${i}">
+      <p data-nota="texto" data-vacio="escribe aquí tu nota...">${esc(n.texto)}</p>
+      <p class="firma">— <span data-nota="firma" data-vacio="tu nombre">${esc(n.firma)}</span></p>
+      <button class="borrar-nota" type="button" aria-label="Borrar nota">×</button>
+    </div>`).join("");
+
+  const paginaFirmas = () => `
+    <h2>Firmas &amp; notas</h2>
+    <p class="ayuda">déjale algo escrito al semillero...</p>
+    <div class="notas">${htmlNotas(notasActuales())}</div>
+    <button class="nueva-nota" type="button">+ dejar una nota</button>`;
 
   const despedida = (A) => `
     <h2>Gracias.</h2>
@@ -250,7 +270,8 @@
       if (e.target === h && e.propertyName === "transform") h.style.zIndex = zReposo(i);
     });
     h.addEventListener("click", (e) => {
-      if (editando && e.target.closest(".leyenda")) return; // clic para escribir, no para pasar la hoja
+      if (e.target.closest(".nueva-nota")) return;
+      if (editando && e.target.closest(".leyenda, .notas")) return; // clic para escribir, no para pasar la hoja
       h.classList.contains("volteada") ? anterior() : siguiente();
     });
   });
@@ -346,7 +367,7 @@
     editando = !editando;
     document.body.classList.toggle("editando", editando);
     btnEditar.textContent = editando ? "✓ terminar" : "✎ editar textos";
-    libro.querySelectorAll("[data-campo]").forEach((el) => {
+    libro.querySelectorAll("[data-campo], [data-nota]").forEach((el) => {
       if (editando) el.setAttribute("contenteditable", "plaintext-only");
       else el.removeAttribute("contenteditable");
     });
@@ -354,13 +375,51 @@
   }
   btnEditar.addEventListener("click", alternarEdicion);
 
-  const nCambios = () => Object.keys(borrador).length;
   function actualizarEstado(msg) {
-    estadoEdicion.textContent = msg || (nCambios() ? `${nCambios()} foto(s) sin guardar` : "todo guardado");
-    btnGuardar.disabled = !nCambios();
+    const n = Object.keys(borrador).length;
+    const partes = [];
+    if (n) partes.push(`${n} foto(s)`);
+    if (borradorNotas) partes.push("notas");
+    estadoEdicion.textContent = msg || (partes.length ? `${partes.join(" y ")} sin guardar` : "todo guardado");
+    btnGuardar.disabled = !partes.length;
   }
 
+  /* ---------- Notas de la página de firmas ---------- */
+  const cajaNotas = libro.querySelector(".p-firmas .notas");
+  function pintarNotas() {
+    if (!cajaNotas) return;
+    cajaNotas.innerHTML = htmlNotas(notasActuales());
+    if (editando) cajaNotas.querySelectorAll("[data-nota]").forEach((el) => el.setAttribute("contenteditable", "plaintext-only"));
+  }
+  function cambiarNotas(notas) {
+    borradorNotas = notas;
+    localStorage.setItem(CLAVE_NOTAS, JSON.stringify(notas));
+    actualizarEstado();
+  }
+  libro.addEventListener("click", (e) => {
+    if (e.target.closest(".nueva-nota")) {
+      if (!editando) alternarEdicion();
+      cambiarNotas([...notasActuales(), { texto: "", firma: "" }]);
+      pintarNotas();
+      const ultima = cajaNotas.lastElementChild;
+      ultima.scrollIntoView({ block: "nearest" });
+      ultima.querySelector("[data-nota]").focus();
+    } else if (e.target.closest(".borrar-nota")) {
+      const i = +e.target.closest(".nota-firma").dataset.i;
+      cambiarNotas(notasActuales().filter((_, k) => k !== i));
+      pintarNotas();
+    }
+  });
+
   libro.addEventListener("input", (e) => {
+    const nota = e.target.closest("[data-nota]");
+    if (nota) {
+      const i = +nota.closest(".nota-firma").dataset.i;
+      const valor = nota.innerText.replace(/ /g, " ").trim();
+      if (!valor) nota.textContent = "";
+      cambiarNotas(notasActuales().map((n, k) => (k === i ? { ...n, [nota.dataset.nota]: valor } : n)));
+      return;
+    }
     const el = e.target.closest("[data-campo]");
     const ley = el && el.closest(".leyenda");
     if (!ley) return;
@@ -374,12 +433,13 @@
     if (campo === "descripcion") pag.classList.toggle("larga", valor.length > 140);
     actualizarEstado();
   });
-  // Enter en el título o la fecha termina de escribir (en la descripción sí hace salto de línea)
+  // Enter en el título, la fecha o la firma termina de escribir (en la descripción y la nota sí hace salto de línea)
   libro.addEventListener("keydown", (e) => {
-    const el = e.target.closest && e.target.closest("[data-campo]");
+    const el = e.target.closest && e.target.closest("[data-campo], [data-nota]");
     if (!el) return;
     e.stopPropagation();
-    if (e.key === "Escape" || (e.key === "Enter" && el.dataset.campo !== "descripcion")) {
+    const multilinea = el.dataset.campo === "descripcion" || el.dataset.nota === "texto";
+    if (e.key === "Escape" || (e.key === "Enter" && !multilinea)) {
       e.preventDefault();
       el.blur();
     }
@@ -394,17 +454,24 @@
         return campos.length ? `  ${JSON.stringify(foto)}: { ${campos.join(", ")} },` : null;
       })
       .filter(Boolean);
+    const notas = notasActuales()
+      .filter((n) => !notaVacia(n))
+      .map((n) => ({ texto: n.texto || "", firma: n.firma || "" }));
+    const lineasNotas = notas.map((n) => `  { texto: ${JSON.stringify(n.texto)}, firma: ${JSON.stringify(n.firma)} },`);
     return {
       todo,
+      notas,
       texto:
         "/* Textos escritos desde el modo edición del álbum (botón \"✎ editar textos\").\n" +
         "   Lo que está aquí tiene prioridad sobre fotos.js. También se puede editar a mano. */\n" +
-        "const DESCRIPCIONES = {\n" + lineas.join("\n") + (lineas.length ? "\n" : "") + "};\n",
+        "const DESCRIPCIONES = {\n" + lineas.join("\n") + (lineas.length ? "\n" : "") + "};\n" +
+        "\n/* Notas de la página \"Firmas & notas\" */\n" +
+        "const NOTAS = [\n" + lineasNotas.join("\n") + (lineasNotas.length ? "\n" : "") + "];\n",
     };
   }
 
   btnGuardar.addEventListener("click", async () => {
-    const { todo, texto } = generarArchivo();
+    const { todo, notas, texto } = generarArchivo();
     if (window.showSaveFilePicker) {
       try {
         archivoDestino = archivoDestino || await showSaveFilePicker({
@@ -419,6 +486,10 @@
         Object.assign(GUARDADAS, todo);
         borrador = {};
         localStorage.removeItem(CLAVE_BORRADOR);
+        notasGuardadas = notas;
+        borradorNotas = null;
+        localStorage.removeItem(CLAVE_NOTAS);
+        pintarNotas();
         actualizarEstado(`guardado en ${archivoDestino.name} ✓`);
         return;
       } catch (err) {

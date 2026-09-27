@@ -406,11 +406,79 @@ body {
   color: var(--tinta);
   height: 2.2em;
 }
-.p-firmas p {
+.p-firmas .ayuda {
   font: 1.35em var(--f-mano);
   color: var(--tinta-suave);
   opacity: .7;
 }
+.p-firmas .notas:not(:empty) ~ .nueva-nota { margin-top: .6em; }
+.p-firmas .ayuda:has(+ .notas:not(:empty)) { display: none; }
+/* Notas pegadas en la hoja rayada */
+.p-firmas .notas {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: .6em .8em .4em .3em;
+}
+.p-firmas .notas:empty { flex: 0 0 auto; padding: 0; }
+.nota-firma {
+  position: relative;
+  margin: 0 0 .9em;
+  padding: .6em .9em .45em;
+  background: #fff6c9;
+  box-shadow: 0 2px 6px rgba(40, 25, 10, .18);
+  transform: rotate(-1.2deg);
+}
+.nota-firma:nth-child(even) { background: #e3f0dd; transform: rotate(1deg); }
+.nota-firma:nth-child(3n) { background: #fbe1dc; }
+.nota-firma p {
+  font: 1.3em/1.1 var(--f-mano);
+  color: var(--tinta);
+  white-space: pre-wrap;
+}
+.nota-firma .firma { margin-top: .15em; text-align: right; font-size: 1.15em; color: var(--tinta-suave); }
+.nota-firma [data-nota]:empty { display: none; }
+body:not(.editando) .nota-firma:has(> [data-nota]:empty):has(.firma [data-nota]:empty) { display: none; }
+.nota-firma .firma:has([data-nota]:empty) { display: none; }
+.editando .nota-firma .firma:has([data-nota]:empty) { display: block; }
+.editando .nota-firma [data-nota]:empty { display: block; }
+.editando .nota-firma .firma [data-nota]:empty { display: inline-block; }
+.editando .nota-firma [data-nota] {
+  min-width: 4em;
+  outline: 1px dashed rgba(38, 51, 92, .3);
+  outline-offset: 2px;
+  border-radius: 2px;
+  cursor: text;
+}
+.editando .nota-firma [data-nota]:focus { outline: 2px solid var(--oro-oscuro); background: rgba(255,255,255,.45); }
+.editando .nota-firma [data-nota]:empty::before { content: attr(data-vacio); color: #b3a88f; }
+.borrar-nota {
+  display: none;
+  position: absolute;
+  top: -.45em;
+  right: -.45em;
+  width: 1.4em;
+  height: 1.4em;
+  border: 0;
+  border-radius: 50%;
+  background: var(--rojo-sello);
+  color: #fff;
+  font: 700 .8em/1 var(--f-mono);
+  cursor: pointer;
+}
+.editando .borrar-nota { display: block; }
+.nueva-nota {
+  align-self: flex-start;
+  padding: .2em .7em;
+  border: 1px dashed var(--tinta-suave);
+  border-radius: 4px;
+  background: transparent;
+  font: 1.2em var(--f-mano);
+  color: var(--tinta-suave);
+  cursor: pointer;
+}
+.nueva-nota:hover { background: rgba(255,255,255,.4); color: var(--tinta); }
 
 /* ---------- Despedida ---------- */
 .p-despedida { justify-content: center; text-align: center; padding: 3em; }
