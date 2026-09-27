@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memorias · Semillero de Ciberseguridad</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <div class="grano" aria-hidden="true"></div>
+
+  <header class="barra">
+    <span>semillero@unisabana:<b>~/memorias</b>$</span>
+    <span class="barra-der">IEEE CS</span>
+  </header>
+
+  <main class="escena">
+    <div class="libro cerrado-inicio" id="libro"></div>
+  </main>
+
+  <nav class="controles">
+    <button id="anterior" aria-label="Página anterior">&lsaquo;</button>
+    <span id="indicador">portada</span>
+    <button id="siguiente" aria-label="Página siguiente">&rsaquo;</button>
+  </nav>
+  <p class="pista">clic en las páginas o usa ← → &nbsp;·&nbsp; M para la música</p>
+
+  <button class="casete" id="casete" aria-label="Reproducir o pausar la música">
+    <span class="casete-cuerpo">
+      <span class="casete-etiqueta">
+        <span class="casete-titulo" id="casete-titulo"></span>
+        <span class="casete-artista" id="casete-artista"></span>
+      </span>
+      <span class="casete-ventana">
+        <span class="carrete"></span>
+        <span class="cinta"></span>
+        <span class="carrete"></span>
+      </span>
+    </span>
+    <span class="casete-estado" id="casete-estado">▶ música</span>
+  </button>
+
+  <div class="panel-edicion" id="panel-edicion" hidden>
+    <button id="btn-editar">✎ editar textos</button>
+    <div class="solo-editando">
+      <select id="saltar-a" aria-label="Ir a una ocasión"><option value="">ir a ocasión…</option></select>
+      <button id="btn-guardar">💾 guardar</button>
+      <span id="estado-edicion"></span>
+    </div>
+  </div>
+
+  <audio id="musica" loop preload="auto"></audio>
+
+  <script src="fotos.js"></script>
+  <script src="descripciones.js"></script>
+  <script src="album.js"></script>
+</body>
+</html>
