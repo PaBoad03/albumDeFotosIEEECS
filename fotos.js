@@ -68,6 +68,7 @@ const ALBUM = {
     archivo: "musica/20201203.mp3",
     titulo: "20201203",
     artista: "Mac DeMarco",
+    inicio: 14.4, // segundo en que empieza a sonar (la intro de esta canción es muy bajita); 0 = desde el principio
   },
 
   // Una ocasión por carpeta de fotos/Fotos semillero. Cambia el orden moviendo bloques completos.

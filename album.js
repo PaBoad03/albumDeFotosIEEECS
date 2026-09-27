@@ -703,7 +703,7 @@
   const C = ALBUM.cancion || {};
   document.getElementById("casete-titulo").textContent = C.titulo || "sin título";
   document.getElementById("casete-artista").textContent = C.artista || "";
-  musica.src = C.archivo || "";
+  musica.src = C.archivo ? C.archivo + (C.inicio ? `#t=${C.inicio}` : "") : ""; // #t= la hace arrancar en ese segundo
   const VOLUMEN = 0.55;
   let pausadaPorUsuario = false;
   let animVol = null;
@@ -727,7 +727,7 @@
       .then(() => {
         casete.classList.add("sonando");
         estadoCasete.textContent = "❚❚ sonando";
-        fundir(VOLUMEN, 2500);
+        fundir(VOLUMEN, 1200);
       })
       .catch(() => {});
   }
