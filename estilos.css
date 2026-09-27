@@ -439,20 +439,26 @@ body {
 }
 .nota-firma .firma { margin-top: .15em; text-align: right; font-size: 1.15em; color: var(--tinta-suave); }
 .nota-firma [data-nota]:empty { display: none; }
-body:not(.editando) .nota-firma:has(> [data-nota]:empty):has(.firma [data-nota]:empty) { display: none; }
+body:not(.editando) .nota-firma:not(.pendiente):has(> [data-nota]:empty):has(.firma [data-nota]:empty) { display: none; }
 .nota-firma .firma:has([data-nota]:empty) { display: none; }
-.editando .nota-firma .firma:has([data-nota]:empty) { display: block; }
-.editando .nota-firma [data-nota]:empty { display: block; }
-.editando .nota-firma .firma [data-nota]:empty { display: inline-block; }
-.editando .nota-firma [data-nota] {
+.editando .nota-firma .firma:has([data-nota]:empty),
+.pendiente .firma:has([data-nota]:empty) { display: block; }
+.editando .nota-firma [data-nota]:empty,
+.pendiente [data-nota]:empty { display: block; }
+.editando .nota-firma .firma [data-nota]:empty,
+.pendiente .firma [data-nota]:empty { display: inline-block; }
+.editando .nota-firma [data-nota],
+.pendiente [data-nota] {
   min-width: 4em;
   outline: 1px dashed rgba(38, 51, 92, .3);
   outline-offset: 2px;
   border-radius: 2px;
   cursor: text;
 }
-.editando .nota-firma [data-nota]:focus { outline: 2px solid var(--oro-oscuro); background: rgba(255,255,255,.45); }
-.editando .nota-firma [data-nota]:empty::before { content: attr(data-vacio); color: #b3a88f; }
+.editando .nota-firma [data-nota]:focus,
+.pendiente [data-nota]:focus { outline: 2px solid var(--oro-oscuro); background: rgba(255,255,255,.45); }
+.editando .nota-firma [data-nota]:empty::before,
+.pendiente [data-nota]:empty::before { content: attr(data-vacio); color: #b3a88f; }
 .borrar-nota {
   display: none;
   position: absolute;
@@ -467,7 +473,20 @@ body:not(.editando) .nota-firma:has(> [data-nota]:empty):has(.firma [data-nota]:
   font: 700 .8em/1 var(--f-mono);
   cursor: pointer;
 }
-.editando .borrar-nota { display: block; }
+.editando .borrar-nota,
+.pendiente .borrar-nota { display: block; }
+.publicar-nota {
+  display: block;
+  margin: .4em 0 0 auto;
+  padding: .1em .6em;
+  border: 1px solid var(--tinta-suave);
+  border-radius: 4px;
+  background: rgba(255,255,255,.5);
+  font: 1.05em var(--f-mano);
+  color: var(--tinta);
+  cursor: pointer;
+}
+.publicar-nota:disabled { opacity: .6; cursor: wait; }
 .nueva-nota {
   align-self: flex-start;
   padding: .2em .7em;

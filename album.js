@@ -29,6 +29,22 @@
   if (!Array.isArray(borradorNotas)) borradorNotas = null;
   const notasActuales = () => borradorNotas || notasGuardadas;
   const notaVacia = (n) => !(n.texto || "").trim() && !(n.firma || "").trim();
+
+  // Notas en línea (Supabase): si supabase.js tiene url y clave, cada visitante pega su nota ahí.
+  // Las de NOTAS (descripciones.js) se siguen mostrando primero y se editan como antes.
+  const SB = typeof SUPABASE !== "undefined" && SUPABASE.url && SUPABASE.clave ? SUPABASE : null;
+  let notasEnLinea = [];
+  const CLAVE_PENDIENTES = "album-memorias-notas-pendientes";
+  let pendientes = []; // notas que el visitante está escribiendo y aún no pega
+  try { pendientes = JSON.parse(localStorage.getItem(CLAVE_PENDIENTES)) || []; } catch (_) {}
+  if (!Array.isArray(pendientes)) pendientes = [];
+  const guardarPendientes = () => localStorage.setItem(CLAVE_PENDIENTES, JSON.stringify(pendientes));
+  function pedirSB(ruta, opciones = {}) {
+    const cabeceras = { apikey: SB.clave, "Content-Type": "application/json", ...opciones.headers };
+    if (!SB.clave.startsWith("sb_")) cabeceras.Authorization = `Bearer ${SB.clave}`; // clave "anon" antigua (JWT)
+    return fetch(`${SB.url.replace(/\/+$/, "")}/rest/v1/${ruta}`, { ...opciones, headers: cabeceras })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Supabase respondió ${r.status}`))));
+  }
   function conTextos(p) {
     const ed = { ...GUARDADAS[p.foto], ...borrador[p.foto] };
     const r = { ...p };
@@ -155,10 +171,25 @@
       <button class="borrar-nota" type="button" aria-label="Borrar nota">×</button>
     </div>`).join("");
 
+  // Notas de Supabase (solo lectura) + las que el visitante está escribiendo
+  const htmlEnLinea = () => !SB ? "" :
+    notasEnLinea.map((n) => `
+    <div class="nota-firma">
+      ${n.texto ? `<p>${esc(n.texto)}</p>` : ""}
+      ${n.firma ? `<p class="firma">— ${esc(n.firma)}</p>` : ""}
+    </div>`).join("") +
+    pendientes.map((n, i) => `
+    <div class="nota-firma pendiente" data-p="${i}">
+      <p data-nota="texto" data-vacio="escribe aquí tu nota..." contenteditable="plaintext-only">${esc(n.texto)}</p>
+      <p class="firma">— <span data-nota="firma" data-vacio="tu nombre" contenteditable="plaintext-only">${esc(n.firma)}</span></p>
+      <button class="borrar-nota" type="button" aria-label="Descartar nota">×</button>
+      <button class="publicar-nota" type="button">📌 pegar nota</button>
+    </div>`).join("");
+
   const paginaFirmas = () => `
     <h2>Firmas &amp; notas</h2>
     <p class="ayuda">déjale algo escrito al semillero...</p>
-    <div class="notas">${htmlNotas(notasActuales())}</div>
+    <div class="notas">${htmlNotas(notasActuales())}${htmlEnLinea()}</div>
     <button class="nueva-nota" type="button">+ dejar una nota</button>`;
 
   const despedida = (A) => `
@@ -270,7 +301,7 @@
       if (e.target === h && e.propertyName === "transform") h.style.zIndex = zReposo(i);
     });
     h.addEventListener("click", (e) => {
-      if (e.target.closest(".nueva-nota")) return;
+      if (e.target.closest(".nueva-nota, .pendiente")) return;
       if (editando && e.target.closest(".leyenda, .notas")) return; // clic para escribir, no para pasar la hoja
       h.classList.contains("volteada") ? anterior() : siguiente();
     });
@@ -367,7 +398,7 @@
     editando = !editando;
     document.body.classList.toggle("editando", editando);
     btnEditar.textContent = editando ? "✓ terminar" : "✎ editar textos";
-    libro.querySelectorAll("[data-campo], [data-nota]").forEach((el) => {
+    libro.querySelectorAll("[data-campo], .nota-firma:not(.pendiente) [data-nota]").forEach((el) => {
       if (editando) el.setAttribute("contenteditable", "plaintext-only");
       else el.removeAttribute("contenteditable");
     });
@@ -388,8 +419,8 @@
   const cajaNotas = libro.querySelector(".p-firmas .notas");
   function pintarNotas() {
     if (!cajaNotas) return;
-    cajaNotas.innerHTML = htmlNotas(notasActuales());
-    if (editando) cajaNotas.querySelectorAll("[data-nota]").forEach((el) => el.setAttribute("contenteditable", "plaintext-only"));
+    cajaNotas.innerHTML = htmlNotas(notasActuales()) + htmlEnLinea();
+    if (editando) cajaNotas.querySelectorAll(".nota-firma:not(.pendiente) [data-nota]").forEach((el) => el.setAttribute("contenteditable", "plaintext-only"));
   }
   function cambiarNotas(notas) {
     borradorNotas = notas;
@@ -398,12 +429,23 @@
   }
   libro.addEventListener("click", (e) => {
     if (e.target.closest(".nueva-nota")) {
-      if (!editando) alternarEdicion();
-      cambiarNotas([...notasActuales(), { texto: "", firma: "" }]);
+      if (SB) {
+        pendientes.push({ texto: "", firma: "" });
+        guardarPendientes();
+      } else {
+        if (!editando) alternarEdicion();
+        cambiarNotas([...notasActuales(), { texto: "", firma: "" }]);
+      }
       pintarNotas();
       const ultima = cajaNotas.lastElementChild;
       ultima.scrollIntoView({ block: "nearest" });
       ultima.querySelector("[data-nota]").focus();
+    } else if (e.target.closest(".publicar-nota")) {
+      publicarNota(e.target.closest(".nota-firma"));
+    } else if (e.target.closest(".pendiente .borrar-nota")) {
+      pendientes.splice(+e.target.closest(".nota-firma").dataset.p, 1);
+      guardarPendientes();
+      pintarNotas();
     } else if (e.target.closest(".borrar-nota")) {
       const i = +e.target.closest(".nota-firma").dataset.i;
       cambiarNotas(notasActuales().filter((_, k) => k !== i));
@@ -411,8 +453,43 @@
     }
   });
 
+  async function publicarNota(caja) {
+    const n = pendientes[+caja.dataset.p];
+    if (notaVacia(n)) return caja.querySelector("[data-nota]").focus();
+    const btn = caja.querySelector(".publicar-nota");
+    btn.disabled = true;
+    btn.textContent = "pegando...";
+    try {
+      const [creada] = await pedirSB("notas", {
+        method: "POST",
+        headers: { Prefer: "return=representation" },
+        body: JSON.stringify({ texto: n.texto.trim(), firma: n.firma.trim() }),
+      });
+      pendientes.splice(pendientes.indexOf(n), 1);
+      guardarPendientes();
+      notasEnLinea.push(creada);
+      pintarNotas();
+    } catch (_) {
+      btn.disabled = false;
+      btn.textContent = "no se pudo, reintenta";
+    }
+  }
+  if (SB) {
+    pedirSB("notas?select=id,texto,firma&order=creada.asc")
+      .then((notas) => { notasEnLinea = notas; pintarNotas(); })
+      .catch((err) => console.warn("No se pudieron cargar las notas en línea:", err));
+  }
+
   libro.addEventListener("input", (e) => {
     const nota = e.target.closest("[data-nota]");
+    const pendiente = nota && nota.closest(".pendiente");
+    if (pendiente) {
+      const valor = nota.innerText.replace(/\u00a0/g, " ").trim();
+      if (!valor) nota.textContent = "";
+      pendientes[+pendiente.dataset.p][nota.dataset.nota] = valor;
+      guardarPendientes();
+      return;
+    }
     if (nota) {
       const i = +nota.closest(".nota-firma").dataset.i;
       const valor = nota.innerText.replace(/ /g, " ").trim();

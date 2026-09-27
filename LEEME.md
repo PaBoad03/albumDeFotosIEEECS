@@ -10,6 +10,13 @@
      en otros navegadores se descarga y tienes que moverlo a esta carpeta).
    - **Notas en la página de firmas:** en la página "Firmas & notas" dale a **+ dejar una nota**, escribe el texto y el nombre.
      La × borra una nota. Se guardan con el mismo botón **💾 guardar** (van en `descripciones.js`, en `NOTAS`).
+   - **Notas en línea (para GitHub Pages):** para que cualquier visitante deje su nota y todos la vean:
+     1. Crea un proyecto gratis en [supabase.com](https://supabase.com)
+     2. En **SQL Editor** pega el contenido de `supabase.sql` y dale **Run**
+     3. En **Project Settings → API Keys** copia la *Project URL* y la clave *publishable* (o *anon*) en `supabase.js`
+        (nunca la *secret* / *service_role*)
+     4. Sube los cambios a GitHub. Ahora **+ dejar una nota** abre una nota nueva y **📌 pegar nota** la publica.
+        Las notas publicadas no se pueden editar ni borrar desde la página; para moderarlas usa **Table Editor → notas** en Supabase.
 3. Pon la canción en `musica/cancion.mp3`
 4. Abre `index.html` en el navegador (doble clic)
 
