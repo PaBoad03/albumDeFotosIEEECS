@@ -164,33 +164,36 @@
     <div class="adorno"></div>
     <p>${esc(p.texto)}</p>`;
 
-  const htmlNotas = (notas) => notas.map((n, i) => `
+  // Cada nota como un trozo de HTML: primero las de descripciones.js, luego las de Supabase
+  // (solo lectura) y al final las que el visitante está escribiendo
+  const htmlTodasLasNotas = () => [
+    ...notasActuales().map((n, i) => `
     <div class="nota-firma" data-i="${i}">
       <p data-nota="texto" data-vacio="escribe aquí tu nota...">${esc(n.texto)}</p>
       <p class="firma">— <span data-nota="firma" data-vacio="tu nombre">${esc(n.firma)}</span></p>
       <button class="borrar-nota" type="button" aria-label="Borrar nota">×</button>
-    </div>`).join("");
-
-  // Notas de Supabase (solo lectura) + las que el visitante está escribiendo
-  const htmlEnLinea = () => !SB ? "" :
-    notasEnLinea.map((n) => `
+    </div>`),
+    ...(!SB ? [] : notasEnLinea.map((n) => `
     <div class="nota-firma">
       ${n.texto ? `<p>${esc(n.texto)}</p>` : ""}
       ${n.firma ? `<p class="firma">— ${esc(n.firma)}</p>` : ""}
-    </div>`).join("") +
-    pendientes.map((n, i) => `
+    </div>`)),
+    ...(!SB ? [] : pendientes.map((n, i) => `
     <div class="nota-firma pendiente" data-p="${i}">
       <p data-nota="texto" data-vacio="escribe aquí tu nota..." contenteditable="plaintext-only">${esc(n.texto)}</p>
       <p class="firma">— <span data-nota="firma" data-vacio="tu nombre" contenteditable="plaintext-only">${esc(n.firma)}</span></p>
       <button class="borrar-nota" type="button" aria-label="Descartar nota">×</button>
       <button class="publicar-nota" type="button">📌 pegar nota</button>
-    </div>`).join("");
+    </div>`)),
+  ];
 
-  const paginaFirmas = () => `
+  // Las notas se reparten después (pintarNotas): si no caben, se agregan más hojas de firmas.
+  // El botón está en todas para que midan igual, pero solo se ve en la última.
+  const paginaFirmas = (k, n) => `
     <h2>Firmas &amp; notas</h2>
-    <p class="ayuda">déjale algo escrito al semillero...</p>
-    <div class="notas">${htmlNotas(notasActuales())}${htmlEnLinea()}</div>
-    <button class="nueva-nota" type="button">+ dejar una nota</button>`;
+    ${k === 0 ? `<p class="ayuda">déjale algo escrito al semillero...</p>` : ""}
+    <div class="notas"></div>
+    <button class="nueva-nota${k < n - 1 ? " oculta" : ""}" type="button">+ dejar una nota</button>`;
 
   const despedida = (A) => `
     <h2>Gracias.</h2>
@@ -210,9 +213,13 @@
 
   /* ---------- Armar el libro ---------- */
 
-  function construir(A) {
+  // Todas las caras del libro, en orden. Se vuelve a calcular cuando cambia el número de hojas de firmas.
+  let hojasDeFirmas = 1; // cuántas páginas de firmas hacen falta para que quepan todas las notas
+  let caraFirmas = -1; // número de cara de la primera página de firmas
+  function carasDelLibro(A) {
     // Páginas interiores: { clase, html, larga }
     const interiores = [{ clase: "p-intro", html: intro(A) }];
+    const ocasiones = [];
 
     let nFoto = 0; // para variar la inclinación y la cinta de cada foto
     const agregarFoto = (original) => {
@@ -225,7 +232,7 @@
       if (p.tipo === "texto") {
         interiores.push({ clase: "p-texto", html: paginaTexto(p) });
       } else if (Array.isArray(p.fotos)) {
-        inicioOcasiones.push({ nombre: p.ocasion, cara: interiores.length + 1 }); // +1 por la portada
+        ocasiones.push({ nombre: p.ocasion, cara: interiores.length + 1 }); // +1 por la portada
         // Ocasión: varias fotos del mismo evento. Cada foto hereda la fecha de la ocasión si no trae la suya.
         if (p.descripcion) interiores.push({ clase: "p-texto p-ocasion", html: paginaOcasion(p) });
         const fotos = p.fotos.filter(Boolean);
@@ -236,45 +243,46 @@
         agregarFoto(p);
       }
     });
+    if (!inicioOcasiones.length) inicioOcasiones.push(...ocasiones);
 
-    if (A.paginaDeFirmas) interiores.push({ clase: "p-firmas", html: paginaFirmas() });
+    if (A.paginaDeFirmas) {
+      caraFirmas = interiores.length + 1;
+      for (let k = 0; k < hojasDeFirmas; k++) interiores.push({ clase: "p-firmas", html: paginaFirmas(k, hojasDeFirmas) });
+    }
     // Cada hoja tiene 2 caras: el número de páginas interiores debe ser par
     if (interiores.length % 2 === 0) interiores.push({ clase: "p-vacia", html: `<p>/* esta página se dejó en blanco intencionalmente */</p>` });
     interiores.push({ clase: "p-despedida", html: despedida(A) });
 
-    const caras = [
+    return [
       { tapa: portada(A) },
       ...interiores,
       { tapa: contraportada(A) },
     ];
+  }
 
-    const hojas = [];
-    for (let h = 0; h < caras.length / 2; h++) {
-      const hoja = document.createElement("div");
-      hoja.className = "hoja";
-      [caras[2 * h], caras[2 * h + 1]].forEach((c, lado) => {
-        const k = 2 * h + lado;
-        const cara = document.createElement("div");
-        cara.className = "cara " + (lado === 0 ? "frente" : "atras");
-        if (c.tapa) {
-          cara.innerHTML = c.tapa;
-        } else {
-          const lr = lado === 0 ? "der" : "izq";
-          const extra = c.fecha && fechaLarga(c.fecha) ? ` · ${fechaLarga(c.fecha)}` : "";
-          cara.innerHTML = `
-            <div class="pagina ${lr} ${c.clase}">
-              ${c.html}
-              <span class="folio">${String(k).padStart(2, "0")}${extra}</span>
-            </div>`;
-        }
-        hoja.appendChild(cara);
-      });
-      libro.appendChild(hoja);
-      hojas.push(hoja);
-    }
+  function crearHoja(caras, h) {
+    const hoja = document.createElement("div");
+    hoja.className = "hoja";
+    [caras[2 * h], caras[2 * h + 1]].forEach((c, lado) => {
+      const k = 2 * h + lado;
+      const cara = document.createElement("div");
+      cara.className = "cara " + (lado === 0 ? "frente" : "atras");
+      if (c.tapa) {
+        cara.innerHTML = c.tapa;
+      } else {
+        const lr = lado === 0 ? "der" : "izq";
+        const extra = c.fecha && fechaLarga(c.fecha) ? ` · ${fechaLarga(c.fecha)}` : "";
+        cara.innerHTML = `
+          <div class="pagina ${lr} ${c.clase}">
+            ${c.html}
+            <span class="folio">${String(k).padStart(2, "0")}${extra}</span>
+          </div>`;
+      }
+      hoja.appendChild(cara);
+    });
 
     // Fotos que no existen -> marcador que dice qué archivo falta
-    libro.querySelectorAll("img[data-archivo]").forEach((img) => {
+    hoja.querySelectorAll("img[data-archivo]").forEach((img) => {
       img.addEventListener("error", () => {
         const d = document.createElement("div");
         d.className = "foto-falta";
@@ -282,30 +290,55 @@
         img.replaceWith(d);
       });
     });
+    if (document.body.classList.contains("editando"))
+      hoja.querySelectorAll("[data-campo]").forEach((el) => el.setAttribute("contenteditable", "plaintext-only"));
 
-    return hojas;
+    hoja.addEventListener("transitionend", (e) => {
+      if (e.target === hoja && e.propertyName === "transform") hoja.style.zIndex = zReposo(hojas.indexOf(hoja));
+    });
+    hoja.addEventListener("click", (e) => {
+      if (e.target.closest(".nueva-nota, .pendiente")) return;
+      if (editando && e.target.closest(".leyenda, .notas")) return; // clic para escribir, no para pasar la hoja
+      hoja.classList.contains("volteada") ? anterior() : siguiente();
+    });
+    return hoja;
+  }
+
+  // Arma de nuevo las hojas desde la de firmas hasta el final (las anteriores no cambian)
+  function rearmarFinal() {
+    const caras = carasDelLibro(ALBUM);
+    const desde = Math.floor(caraFirmas / 2);
+    hojas.splice(desde).forEach((h) => h.remove());
+    for (let h = desde; h < caras.length / 2; h++) {
+      const hoja = crearHoja(caras, h);
+      libro.appendChild(hoja);
+      hojas.push(hoja);
+    }
+    total = hojas.length;
+    actual = Math.min(actual, total);
+    hojas.forEach((h, i) => {
+      h.classList.toggle("volteada", i < actual);
+      h.style.zIndex = zReposo(i);
+    });
+    actualizar();
   }
 
   const inicioOcasiones = []; // { nombre, cara } para saltar directo a una ocasión
-  const hojas = construir(ALBUM);
-  const total = hojas.length;
+  const hojas = [];
+  let total = 0;
   let actual = 0; // cuántas hojas están volteadas
   let capa = 0;
+  {
+    const caras = carasDelLibro(ALBUM);
+    for (let h = 0; h < caras.length / 2; h++) hojas.push(crearHoja(caras, h));
+    libro.append(...hojas);
+    total = hojas.length;
+  }
 
   function zReposo(i) {
     return hojas[i].classList.contains("volteada") ? i + 1 : total - i;
   }
-  hojas.forEach((h, i) => {
-    h.style.zIndex = zReposo(i);
-    h.addEventListener("transitionend", (e) => {
-      if (e.target === h && e.propertyName === "transform") h.style.zIndex = zReposo(i);
-    });
-    h.addEventListener("click", (e) => {
-      if (e.target.closest(".nueva-nota, .pendiente")) return;
-      if (editando && e.target.closest(".leyenda, .notas")) return; // clic para escribir, no para pasar la hoja
-      h.classList.contains("volteada") ? anterior() : siguiente();
-    });
-  });
+  hojas.forEach((h, i) => (h.style.zIndex = zReposo(i)));
 
   function actualizar() {
     libro.classList.toggle("cerrado-inicio", actual === 0);
@@ -416,11 +449,65 @@
   }
 
   /* ---------- Notas de la página de firmas ---------- */
-  const cajaNotas = libro.querySelector(".p-firmas .notas");
+  const paginasDeFirmas = () => [...libro.querySelectorAll(".p-firmas")];
+
+  // Mide las notas en una copia invisible de la página de firmas y las agrupa por página:
+  // cuando la siguiente ya no cabe, empieza una página nueva (una nota más alta que la página se queda sola y con scroll)
+  function repartirNotas(notas) {
+    const prueba = paginasDeFirmas()[0].cloneNode(true);
+    prueba.style.visibility = "hidden";
+    prueba.setAttribute("aria-hidden", "true");
+    paginasDeFirmas()[0].after(prueba);
+    const caja = prueba.querySelector(".notas");
+    caja.innerHTML = "";
+    const grupos = [[]];
+    for (const html of notas) {
+      caja.insertAdjacentHTML("beforeend", html);
+      if (caja.scrollHeight > caja.clientHeight + 1 && grupos.at(-1).length) {
+        grupos.push([]);
+        caja.innerHTML = html;
+      }
+      grupos.at(-1).push(html);
+    }
+    prueba.remove();
+    return grupos;
+  }
+
   function pintarNotas() {
-    if (!cajaNotas) return;
-    cajaNotas.innerHTML = htmlNotas(notasActuales()) + htmlEnLinea();
-    if (editando) cajaNotas.querySelectorAll(".nota-firma:not(.pendiente) [data-nota]").forEach((el) => el.setAttribute("contenteditable", "plaintext-only"));
+    if (!paginasDeFirmas().length) return;
+    const grupos = repartirNotas(htmlTodasLasNotas());
+    if (grupos.length !== hojasDeFirmas) {
+      hojasDeFirmas = grupos.length;
+      rearmarFinal();
+    }
+    paginasDeFirmas().forEach((pag, k) => {
+      const caja = pag.querySelector(".notas");
+      caja.innerHTML = grupos[k].join("");
+      if (editando) caja.querySelectorAll(".nota-firma:not(.pendiente) [data-nota]").forEach((el) => el.setAttribute("contenteditable", "plaintext-only"));
+    });
+  }
+  pintarNotas();
+  // Si el #número de la dirección apuntaba a hojas de firmas que recién se crearon
+  for (; actual < Math.min(total, parseInt(location.hash.slice(1), 10) || 0); actual++) {
+    hojas[actual].classList.add("volteada");
+    hojas[actual].style.zIndex = zReposo(actual);
+  }
+  actualizar();
+  if (document.fonts) document.fonts.ready.then(pintarNotas); // con otra letra las notas miden distinto
+  let esperaResize = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(esperaResize);
+    esperaResize = setTimeout(() => {
+      // No se reparte mientras alguien escribe una nota (perdería el cursor)
+      if (!(document.activeElement && document.activeElement.closest && document.activeElement.closest(".p-firmas"))) pintarNotas();
+    }, 250);
+  });
+
+  // Pasa hasta la última página de firmas (con animación si está a una hoja)
+  function irAUltimaFirma() {
+    const objetivo = Math.ceil((caraFirmas + hojasDeFirmas - 1) / 2);
+    if (objetivo === actual + 1) siguiente();
+    else if (objetivo !== actual) irACara(caraFirmas + hojasDeFirmas - 1);
   }
   function cambiarNotas(notas) {
     borradorNotas = notas;
@@ -437,9 +524,10 @@
         cambiarNotas([...notasActuales(), { texto: "", firma: "" }]);
       }
       pintarNotas();
-      const ultima = cajaNotas.lastElementChild;
+      irAUltimaFirma();
+      const ultima = paginasDeFirmas().at(-1).querySelector(".notas").lastElementChild;
       ultima.scrollIntoView({ block: "nearest" });
-      ultima.querySelector("[data-nota]").focus();
+      ultima.querySelector("[data-nota]").focus({ preventScroll: true });
     } else if (e.target.closest(".publicar-nota")) {
       publicarNota(e.target.closest(".nota-firma"));
     } else if (e.target.closest(".pendiente .borrar-nota")) {

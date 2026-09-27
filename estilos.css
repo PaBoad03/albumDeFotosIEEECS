@@ -497,6 +497,7 @@ body:not(.editando) .nota-firma:not(.pendiente):has(> [data-nota]:empty):has(.fi
   color: var(--tinta-suave);
   cursor: pointer;
 }
+.nueva-nota.oculta { visibility: hidden; } /* solo va en la última página de firmas */
 .nueva-nota:hover { background: rgba(255,255,255,.4); color: var(--tinta); }
 
 /* ---------- Despedida ---------- */
