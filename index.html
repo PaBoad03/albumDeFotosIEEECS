@@ -44,11 +44,18 @@
   </button>
 
   <div class="panel-edicion" id="panel-edicion" hidden>
+    <form class="entrar" id="form-entrar" hidden>
+      <input type="email" name="correo" placeholder="correo del editor" autocomplete="username" required>
+      <input type="password" name="clave" placeholder="contraseña" autocomplete="current-password" required>
+      <button type="submit">entrar</button>
+      <span id="estado-entrar"></span>
+    </form>
     <button id="btn-editar">✎ editar textos</button>
     <div class="solo-editando">
       <select id="saltar-a" aria-label="Ir a una ocasión"><option value="">ir a ocasión…</option></select>
       <button id="btn-guardar">💾 guardar</button>
       <span id="estado-edicion"></span>
+      <button id="btn-salir" hidden>salir</button>
     </div>
   </div>
 

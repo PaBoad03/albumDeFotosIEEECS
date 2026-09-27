@@ -729,6 +729,18 @@ body:not(.editando) .nota-firma:not(.pendiente):has(> [data-nota]:empty):has(.fi
 .panel-edicion select option { color: #222; background: #fff; }
 .panel-edicion button:hover:not(:disabled) { background: rgba(217, 180, 106, .15); border-color: var(--oro); }
 .panel-edicion button:disabled { opacity: .35; cursor: default; }
+.panel-edicion .entrar { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.panel-edicion .entrar input {
+  width: 220px;
+  padding: 6px 10px;
+  font: inherit;
+  color: var(--papel);
+  background: rgba(0, 0, 0, .45);
+  border: 1px solid rgba(217, 180, 106, .35);
+  border-radius: 4px;
+}
+.panel-edicion .entrar input:focus { outline: none; border-color: var(--oro); }
+.panel-edicion [hidden] { display: none; }
 
 /* ---------- Casete (reproductor) ---------- */
 .casete {

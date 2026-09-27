@@ -17,6 +17,13 @@
         (nunca la *secret* / *service_role*)
      4. Sube los cambios a GitHub. Ahora **+ dejar una nota** abre una nota nueva y **📌 pegar nota** la publica.
         Las notas publicadas no se pueden editar ni borrar desde la página; para moderarlas usa **Table Editor → notas** en Supabase.
+   - **Títulos y descripciones en línea (solo editores):**
+     1. En **SQL Editor** corre `supabase-editores.sql`
+     2. En **Authentication → Sign In / Providers** desactiva *Allow new users to sign up* (así nadie más se crea cuenta)
+     3. En **Authentication → Users → Add user** crea tu usuario (correo + contraseña, con *Auto Confirm User*)
+     4. Hazlo editor con la última línea de `supabase-editores.sql` (cambiando el correo)
+     5. En el álbum presiona **E** (o abre la dirección con `#editar` al final, útil en el celular), entra y edita.
+        **💾 guardar** los sube a Supabase y todos los ven. Los visitantes no ven el panel de edición.
 3. Pon la canción en `musica/cancion.mp3`
 4. Abre `index.html` en el navegador (doble clic)
 

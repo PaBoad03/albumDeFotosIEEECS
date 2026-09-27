@@ -39,11 +39,53 @@
   try { pendientes = JSON.parse(localStorage.getItem(CLAVE_PENDIENTES)) || []; } catch (_) {}
   if (!Array.isArray(pendientes)) pendientes = [];
   const guardarPendientes = () => localStorage.setItem(CLAVE_PENDIENTES, JSON.stringify(pendientes));
-  function pedirSB(ruta, opciones = {}) {
+  // ruta: "rest/v1/..." (tablas) o "auth/v1/..." (sesión). token: el de un editor con sesión iniciada
+  async function pedirSB(ruta, { token, ...opciones } = {}) {
     const cabeceras = { apikey: SB.clave, "Content-Type": "application/json", ...opciones.headers };
-    if (!SB.clave.startsWith("sb_")) cabeceras.Authorization = `Bearer ${SB.clave}`; // clave "anon" antigua (JWT)
-    return fetch(`${SB.url.replace(/\/+$/, "")}/rest/v1/${ruta}`, { ...opciones, headers: cabeceras })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Supabase respondió ${r.status}`))));
+    if (token) cabeceras.Authorization = `Bearer ${token}`;
+    else if (!SB.clave.startsWith("sb_")) cabeceras.Authorization = `Bearer ${SB.clave}`; // clave "anon" antigua (JWT)
+    const r = await fetch(`${SB.url.replace(/\/+$/, "")}/${ruta}`, { ...opciones, headers: cabeceras });
+    const texto = await r.text();
+    const datos = texto ? JSON.parse(texto) : null;
+    if (!r.ok) throw new Error((datos && (datos.msg || datos.error_description || datos.message)) || `Supabase respondió ${r.status}`);
+    return datos;
+  }
+
+  /* Sesión de editor (Supabase Auth). Solo los usuarios de la tabla "editores" pueden guardar
+     títulos y descripciones: eso lo hacen cumplir las reglas de supabase-editores.sql, no este código. */
+  const CLAVE_SESION = "album-memorias-sesion";
+  let sesion = null; // { token, renovar, vence, correo }
+  try { sesion = SB && JSON.parse(localStorage.getItem(CLAVE_SESION)); } catch (_) {}
+  function recordarSesion(s) {
+    sesion = { token: s.access_token, renovar: s.refresh_token, vence: Date.now() + s.expires_in * 1000, correo: s.user && s.user.email };
+    localStorage.setItem(CLAVE_SESION, JSON.stringify(sesion));
+  }
+  function olvidarSesion() {
+    sesion = null;
+    localStorage.removeItem(CLAVE_SESION);
+  }
+  async function tokenVigente() {
+    if (!sesion) return null;
+    if (Date.now() < sesion.vence - 60000) return sesion.token;
+    try {
+      recordarSesion(await pedirSB("auth/v1/token?grant_type=refresh_token", {
+        method: "POST", body: JSON.stringify({ refresh_token: sesion.renovar }),
+      }));
+      return sesion.token;
+    } catch (_) {
+      olvidarSesion();
+      return null;
+    }
+  }
+  async function iniciarSesion(correo, clave) {
+    recordarSesion(await pedirSB("auth/v1/token?grant_type=password", {
+      method: "POST", body: JSON.stringify({ email: correo, password: clave }),
+    }));
+    const soyEditor = await pedirSB("rest/v1/editores?select=user_id", { token: sesion.token });
+    if (!soyEditor.length) {
+      olvidarSesion();
+      throw new Error("esta cuenta no es editora del álbum");
+    }
   }
   function conTextos(p) {
     const ed = { ...GUARDADAS[p.foto], ...borrador[p.foto] };
@@ -304,10 +346,10 @@
     return hoja;
   }
 
-  // Arma de nuevo las hojas desde la de firmas hasta el final (las anteriores no cambian)
-  function rearmarFinal() {
+  // Arma de nuevo las hojas desde `desde` hasta el final (las anteriores no cambian).
+  // Por defecto desde la de firmas, que es lo que cambia cuando hay más o menos notas.
+  function rearmar(desde = Math.floor(caraFirmas / 2)) {
     const caras = carasDelLibro(ALBUM);
-    const desde = Math.floor(caraFirmas / 2);
     hojas.splice(desde).forEach((h) => h.remove());
     for (let h = desde; h < caras.length / 2; h++) {
       const hoja = crearHoja(caras, h);
@@ -427,7 +469,48 @@
     saltarA.blur();
   });
 
+  const formEntrar = document.getElementById("form-entrar");
+  const estadoEntrar = document.getElementById("estado-entrar");
+  const btnSalir = document.getElementById("btn-salir");
+  function mostrarEntrar() {
+    panel.hidden = false;
+    formEntrar.hidden = false;
+    btnEditar.hidden = true;
+    formEntrar.querySelector("input").focus();
+  }
+  formEntrar.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const boton = formEntrar.querySelector("button");
+    boton.disabled = true;
+    estadoEntrar.textContent = "entrando...";
+    try {
+      await iniciarSesion(formEntrar.correo.value.trim(), formEntrar.clave.value);
+      formEntrar.reset();
+      formEntrar.hidden = true;
+      btnEditar.hidden = false;
+      estadoEntrar.textContent = "";
+      if (!editando) alternarEdicion();
+    } catch (err) {
+      estadoEntrar.textContent = /invalid login/i.test(err.message) ? "correo o contraseña incorrectos" : err.message;
+    }
+    boton.disabled = false;
+  });
+  formEntrar.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    formEntrar.hidden = true;
+    btnEditar.hidden = false;
+    panel.hidden = !sesion;
+  });
+  btnSalir.addEventListener("click", () => {
+    if (sesion) pedirSB("auth/v1/logout", { method: "POST", token: sesion.token }).catch(() => {});
+    olvidarSesion();
+    if (editando) alternarEdicion();
+    panel.hidden = true;
+  });
+
   function alternarEdicion() {
+    // Con Supabase, los textos de las fotos se guardan en línea: primero hay que entrar como editor
+    if (SB && !sesion && !editando) return mostrarEntrar();
     editando = !editando;
     document.body.classList.toggle("editando", editando);
     btnEditar.textContent = editando ? "✓ terminar" : "✎ editar textos";
@@ -478,7 +561,7 @@
     const grupos = repartirNotas(htmlTodasLasNotas());
     if (grupos.length !== hojasDeFirmas) {
       hojasDeFirmas = grupos.length;
-      rearmarFinal();
+      rearmar();
     }
     paginasDeFirmas().forEach((pag, k) => {
       const caja = pag.querySelector(".notas");
@@ -548,7 +631,7 @@
     btn.disabled = true;
     btn.textContent = "pegando...";
     try {
-      const [creada] = await pedirSB("notas", {
+      const [creada] = await pedirSB("rest/v1/notas", {
         method: "POST",
         headers: { Prefer: "return=representation" },
         body: JSON.stringify({ texto: n.texto.trim(), firma: n.firma.trim() }),
@@ -563,9 +646,56 @@
     }
   }
   if (SB) {
-    pedirSB("notas?select=id,texto,firma&order=creada.asc")
+    pedirSB("rest/v1/notas?select=id,texto,firma&order=creada.asc")
       .then((notas) => { notasEnLinea = notas; pintarNotas(); })
       .catch((err) => console.warn("No se pudieron cargar las notas en línea:", err));
+    // Títulos, descripciones y fechas guardados en línea: van por encima de descripciones.js
+    pedirSB("rest/v1/textos?select=foto,titulo,descripcion,fecha")
+      .then((filas) => {
+        if (!filas.length) return;
+        filas.forEach((f) => {
+          const t = {};
+          CAMPOS.forEach((c) => { if (f[c] != null) t[c] = f[c]; });
+          GUARDADAS[f.foto] = { ...GUARDADAS[f.foto], ...t };
+        });
+        rearmar(0);
+        pintarNotas();
+      })
+      .catch((err) => console.warn("No se pudieron cargar los textos en línea:", err));
+  }
+
+  // Sube a Supabase los títulos/descripciones/fechas cambiados. Un campo vacío se guarda como null
+  // (= usar lo de descripciones.js o fotos.js, igual que cuando se guarda en el archivo)
+  async function guardarTextosEnLinea() {
+    const token = await tokenVigente();
+    if (!token) {
+      actualizarEstado("la sesión venció: entra otra vez");
+      if (editando) alternarEdicion();
+      mostrarEntrar();
+      return false;
+    }
+    const cambios = { ...borrador };
+    const filas = Object.entries(cambios).map(([foto, c]) => {
+      const t = { ...GUARDADAS[foto], ...c };
+      return { foto, titulo: t.titulo || null, descripcion: t.descripcion || null, fecha: t.fecha || null };
+    });
+    btnGuardar.disabled = true;
+    actualizarEstado("guardando...");
+    try {
+      await pedirSB("rest/v1/textos?on_conflict=foto", {
+        method: "POST", token, headers: { Prefer: "resolution=merge-duplicates" }, body: JSON.stringify(filas),
+      });
+    } catch (err) {
+      actualizarEstado(`no se pudo guardar: ${err.message}`);
+      btnGuardar.disabled = false;
+      return false;
+    }
+    for (const [foto, c] of Object.entries(cambios)) {
+      GUARDADAS[foto] = { ...GUARDADAS[foto], ...c };
+      delete borrador[foto];
+    }
+    localStorage.setItem(CLAVE_BORRADOR, JSON.stringify(borrador));
+    return true;
   }
 
   libro.addEventListener("input", (e) => {
@@ -636,6 +766,9 @@
   }
 
   btnGuardar.addEventListener("click", async () => {
+    if (SB && Object.keys(borrador).length && !(await guardarTextosEnLinea())) return;
+    // Las notas de NOTAS (descripciones.js) se siguen guardando en el archivo
+    if (SB && !borradorNotas) return actualizarEstado("guardado en línea ✓");
     const { todo, notas, texto } = generarArchivo();
     if (window.showSaveFilePicker) {
       try {
@@ -672,7 +805,10 @@
   });
 
   actualizarEstado();
-  panel.hidden = false;
+  // Con Supabase el panel es solo para editores: se abre con la tecla E o con #editar en la dirección
+  panel.hidden = !!SB && !sesion;
+  btnSalir.hidden = !SB;
+  if (SB && !sesion && location.hash === "#editar") mostrarEntrar();
 
   /* ---------- Sonido de hoja (sintetizado, sin archivos) ---------- */
   let ctx = null;
